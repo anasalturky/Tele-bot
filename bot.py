@@ -11,7 +11,7 @@ API_TOKEN = '8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs'
 SMM_API_KEY = ''
 SMM_API_URL = ''
 
-bot = telebot.TeleBot(8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs)
+bot = telebot.TeleBot('8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs')
 
 spin_lock = threading.Lock()
 DB_FILE = "spin_history.txt"

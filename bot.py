@@ -1,182 +1,211 @@
-import logging
+import telebot
+import requests
+from telebot import types
+import random
+import time
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import threading
+from datetime import datetime, timedelta
 
-# إعداد السجلات
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+API_TOKEN = '8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs'
+SMM_API_KEY = ''
+SMM_API_URL = ''
 
-# التوكن من متغيرات البيئة
-TOKEN = os.getenv("8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs")
+bot = telebot.TeleBot(8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs)
 
-# رقم التواصل
-OWNER_NUMBER = "218946303497"
-OWNER_WHATSAPP = f"https://wa.me/{OWNER_NUMBER}"
+spin_lock = threading.Lock()
+DB_FILE = "spin_history.txt"
+memory_cache = {}
 
+WHATSAPP_URL = "https://wa.me/218946303497"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """قائمة الترحيب والخدمات الرئيسية"""
-    keyboard = [
-        [InlineKeyboardButton("📺 اشتراكات", callback_data='subscriptions')],
-        [InlineKeyboardButton("📱 سوشال ميديا", callback_data='social_media')],
-        [InlineKeyboardButton("💳 فيزا إلكترونية", callback_data='visa')],
-        [InlineKeyboardButton("🌐 تصميم موقع", callback_data='website')],
-        [InlineKeyboardButton("📈 خدمات سوشال ميديا", callback_data='social_services')],
-        [InlineKeyboardButton("🎮 شحن عملات", callback_data='coins')],
-        [InlineKeyboardButton("💰 إضافة رصيد للمحفظة", callback_data='wallet')],
-        [InlineKeyboardButton("📞 تواصل مع المالك", url=OWNER_WHATSAPP)]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+# ✅ الأسعار الجديدة
+PRICES_TEMPLATE = """
+📊 أسعار خدمات السوشال ميديا
 
-    welcome_text = (
-        "👋 أهلاً بك في بوت Boosting Libya للخدمات الرقمية.\n\n"
-        "يرجى اختيار الخدمة المطلوبة من القائمة أدناه:"
+🔵 Facebook:
+• 1000 متابع ← 10 دينار
+• 1000 لايك ← 5 دينار
+• 1000 مشاهدة ← 3 دينار
+
+📸 Instagram:
+• 1000 متابع ← 15 دينار
+• 1000 لايك ← 5 دينار
+• 1000 مشاهدة ← 3 دينار
+
+🎵 TikTok:
+• 1000 متابع ← 19 دينار
+• 1000 لايك ← 5 دينار
+• 1000 مشاهدة ← 3 دينار
+"""
+
+SUBSCRIPTIONS_TEXT = """💎 الاشتراكات
+
+• نتفلكس 45 يوم ← 65 دينار
+• نتفلكس أسبوع ← 19 دينار
+• سناب بلس 3 أشهر ← 65 دينار
+• CapCut شهر ← 45 دينار
+• Canva شهر ← 20 دينار
+• ChatGPT شهر ← 70 دينار
+"""
+
+SOCIAL_MEDIA_TEXT = """📱 خدمات السوشال ميديا
+
+• إعلان ممول يوم ← 20 دينار
+• إنشاء بوت اشتراك شهري ← 150 دينار
+"""
+
+PRIZES_DATA = [
+    {"text": "❌ حظ أوفر المرة القادمة", "weight": 40},
+    {"text": "🎁 مبروك! 100 لايك إنستجرام", "weight": 25},
+    {"text": "🎁 خصم 10%", "weight": 15},
+    {"text": "🎁 500 مشاهدة تيك توك", "weight": 14},
+    {"text": "🎁 200 لايك فيسبوك", "weight": 5},
+    {"text": "👑 1000 متابع إنستجرام", "weight": 1}
+]
+
+if os.path.exists(DB_FILE):
+    with open(DB_FILE, "r") as f:
+        for line in f:
+            try:
+                uid, l_time = line.strip().split("|")
+                memory_cache[int(uid)] = datetime.strptime(l_time, "%Y-%m-%d %H:%M:%S")
+            except:
+                continue
+
+# القائمة الرئيسية
+def main_menu():
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton("♻️ إعادة التعبئة", callback_data="refill"),
+        types.InlineKeyboardButton("🎡 عجلة الحظ", callback_data="spin"),
+        types.InlineKeyboardButton("📊 الأسعار", callback_data="prices"),
+        types.InlineKeyboardButton("💎 الاشتراكات", callback_data="subs"),
+        types.InlineKeyboardButton("📱 خدمات إضافية", callback_data="social"),
+        types.InlineKeyboardButton("📞 تواصل واتساب", url=WHATSAPP_URL)
+    )
+    return markup
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(
+        message.chat.id,
+        "اهلا بك في بوت سوشال ليبيا 👑🔥\n\nاختر من القائمة 👇",
+        reply_markup=main_menu()
     )
 
-    if update.message:
-        await update.message.reply_text(
-            welcome_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-    elif update.callback_query:
-        await update.callback_query.edit_message_text(
-            welcome_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+    chat_id = call.message.chat.id
+    msg_id = call.message.message_id
 
+    # 🎡 عجلة الحظ
+    if call.data == "spin":
+        with spin_lock:
+            now = datetime.now()
+            if chat_id in memory_cache:
+                if now < memory_cache[chat_id] + timedelta(hours=24):
+                    bot.answer_callback_query(
+                        call.id,
+                        "يمكنك المحاولة بعد 24 ساعة ❌",
+                        show_alert=True
+                    )
+                    return
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "ℹ️ **مساعدة البوت**\n\n"
-        "اختر القسم المطلوب من القائمة، ثم راجع الأسعار، وبعدها اضغط على زر التواصل لإتمام الشراء.\n\n"
-        f"📞 رابط التواصل:\n{OWNER_WHATSAPP}"
-    )
-    await update.message.reply_text(text, parse_mode='Markdown')
+            memory_cache[chat_id] = now
+            with open(DB_FILE, "a") as f:
+                f.write(f"{chat_id}|{now.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
+        bot.delete_message(chat_id, msg_id)
+        wait = bot.send_message(chat_id, "🎡 جاري التدوير... انتظر عزيزي الزبون")
 
-async def contact_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"📞 تواصل مع المالك مباشرة:\n{OWNER_WHATSAPP}")
+        time.sleep(2)
 
+        res = random.choices(
+            [p["text"] for p in PRIZES_DATA],
+            weights=[p["weight"] for p in PRIZES_DATA],
+            k=1
+        )[0]
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة الضغط على الأزرار"""
-    query = update.callback_query
-    await query.answer()
-
-    back_button = [
-        [InlineKeyboardButton("🔙 العودة للقائمة", callback_data='main_menu')],
-        [InlineKeyboardButton("📞 شراء / تواصل", url=OWNER_WHATSAPP)]
-    ]
-
-    if query.data == 'subscriptions':
-        text = (
-            "📺 **الاشتراكات المتوفرة:**\n\n"
-            "• نتفلكس 45 يوم ← 65 دينار\n"
-            "• نتفلكس أسبوع ← 19 دينار\n"
-            "• سناب بلس 3 أشهر ← 65 دينار\n"
-            "• CapCut شهر ← 45 دينار\n"
-            "• Canva شهر ← 20 دينار\n"
-            "• ChatGPT شهر ← 70 دينار\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
+        bot.edit_message_text(
+            f"🎉 النتيجة:\n\n{res}",
+            chat_id,
+            wait.message_id,
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 رجوع", callback_data="back")
+            )
         )
 
-    elif query.data == 'social_media':
-        text = (
-            "📱 **خدمات السوشال ميديا:**\n\n"
-            "• إعلان ممول اليوم ← 20 دينار\n"
-            "• إنشاء بوت اشتراك شهري ← 150 دينار\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
+    # 📊 الأسعار
+    elif call.data == "prices":
+        bot.edit_message_text(
+            PRICES_TEMPLATE,
+            chat_id,
+            msg_id,
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 رجوع", callback_data="back")
+            )
         )
 
-    elif query.data == 'visa':
-        text = (
-            "💳 **فيزا إلكترونية:**\n\n"
-            "• فيزا إلكترونية ← تواصل لمعرفة التفاصيل والسعر النهائي\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
+    # 💎 الاشتراكات
+    elif call.data == "subs":
+        bot.edit_message_text(
+            SUBSCRIPTIONS_TEXT,
+            chat_id,
+            msg_id,
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 رجوع", callback_data="back")
+            )
         )
 
-    elif query.data == 'website':
-        text = (
-            "🌐 **تصميم موقع:**\n\n"
-            "• تصميم موقع خدمات إلكترونية ← 250 دينار\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
+    # 📱 خدمات إضافية
+    elif call.data == "social":
+        bot.edit_message_text(
+            SOCIAL_MEDIA_TEXT,
+            chat_id,
+            msg_id,
+            reply_markup=types.InlineKeyboardMarkup().add(
+                types.InlineKeyboardButton("🔙 رجوع", callback_data="back")
+            )
         )
 
-    elif query.data == 'social_services':
-        text = (
-            "📈 **خدمات سوشال ميديا:**\n\n"
-            "• خدمات متنوعة للحسابات والصفحات\n"
-            "• زيادة تفاعل ومتابعين وإعلانات\n"
-            "• تواصل لتحديد الطلب بالتفصيل\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
+    # ♻️ refill
+    elif call.data == "refill":
+        msg = bot.send_message(chat_id, "أرسل رقم الطلب عزيزي الزبون 🔄")
+        bot.register_next_step_handler(msg, process_refill)
+
+    elif call.data == "back":
+        bot.edit_message_text(
+            "اهلا بك في بوت سوشال ليبيا 👑🔥\n\nاختر من القائمة 👇",
+            chat_id,
+            msg_id,
+            reply_markup=main_menu()
         )
 
-    elif query.data == 'coins':
-        text = (
-            "🎮 **شحن العملات والبطاقات:**\n\n"
-            "**شدات ببجي:**\n"
-            "• 60 شدة ← 12.7 دينار\n"
-            "• 325 شدة ← 59.7 دينار\n"
-            "• 660 شدة ← 117.7 دينار\n"
-            "• 1800 شدة ← 293.5 دينار\n\n"
-            "**كروت آيتونز تركي:**\n"
-            "• 25 TL ← 8.9 دينار\n"
-            "• 50 TL ← 17.6 دينار\n"
-            "• 100 TL ← 33.5 دينار\n"
-            "• 250 TL ← 82 دينار\n\n"
-            "**كروت آيتونز أمريكي:**\n"
-            "• 2$ ← 25.5 دينار\n"
-            "• 5$ ← 64 دينار\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
-        )
+def process_refill(message):
+    if message.text and message.text.isdigit():
+        bot.reply_to(message, "جاري التحقق...")
 
-    elif query.data == 'wallet':
-        text = (
-            "💰 **إضافة رصيد للمحفظة:**\n\n"
-            "• يتم الشحن عن طريق **دفع ليبيانا**\n"
-            "• أرسل قيمة الرصيد المطلوبة لإتمام العملية\n\n"
-            f"📞 لإتمام الشراء تواصل مع المالك:\n{OWNER_WHATSAPP}"
-        )
+        payload = {'key': SMM_API_KEY, 'action': 'refill', 'order': message.text}
 
-    elif query.data == 'main_menu':
-        await start(update, context)
-        return
-
+        try:
+            r = requests.post(SMM_API_URL, data=payload).json()
+            if 'refill' in r:
+                bot.reply_to(message, "تم إرسال الطلب ✅")
+            else:
+                bot.reply_to(message, "رقم غير صالح ❌")
+        except:
+            bot.reply_to(message, "خطأ في الاتصال ❌")
     else:
-        text = "حدث خطأ، حاول مرة أخرى."
+        bot.reply_to(message, "أدخل أرقام فقط ❌")
 
-    await query.edit_message_text(
-        text=text,
-        reply_markup=InlineKeyboardMarkup(back_button),
-        parse_mode='Markdown'
+@bot.message_handler(func=lambda m: True)
+def other(message):
+    bot.send_message(
+        message.chat.id,
+        "⚠️ عزيزي الزبون، اختر من القائمة 👇",
+        reply_markup=main_menu()
     )
 
-
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logging.error("Exception while handling an update:", exc_info=context.error)
-
-
-def main():
-    """تشغيل البوت"""
-    if not TOKEN:
-        raise ValueError("BOT_TOKEN environment variable is not set.")
-
-    application = Application.builder().token(TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("contact", contact_command))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_error_handler(error_handler)
-
-    print("البوت يعمل الآن...")
-    application.run_polling()
-
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    bot.infinity_polling()

@@ -16,6 +16,7 @@ TOKEN = os.getenv("8377790304:AAEYbz6ldbSysFg0b3PaLwAp3NGgdKvomAs")
 OWNER_NUMBER = "218946303497"
 OWNER_WHATSAPP = f"https://wa.me/{OWNER_NUMBER}"
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """قائمة الترحيب والخدمات الرئيسية"""
     keyboard = [
@@ -36,13 +37,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if update.message:
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode='Markdown')
-    else:
+        await update.message.reply_text(
+            welcome_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    elif update.callback_query:
         await update.callback_query.edit_message_text(
             welcome_text,
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -52,8 +58,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(text, parse_mode='Markdown')
 
+
 async def contact_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"📞 تواصل مع المالك مباشرة:\n{OWNER_WHATSAPP}")
+
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة الضغط على الأزرار"""
@@ -148,13 +156,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logging.error("Exception while handling an update:", exc_info=context.error)
+
 
 def main():
     """تشغيل البوت"""
     if not TOKEN:
-        raise ValueError("TOKEN environment variable is not set.")
+        raise ValueError("BOT_TOKEN environment variable is not set.")
 
     application = Application.builder().token(TOKEN).build()
 
@@ -166,6 +176,7 @@ def main():
 
     print("البوت يعمل الآن...")
     application.run_polling()
+
 
 if __name__ == '__main__':
     main()
